@@ -20,14 +20,16 @@ struct Timer
   bool m_running;
   chrono::time_point<chrono::steady_clock> m_endTime;
 
-  Timer(chrono::milliseconds duration, function<void()> callback, bool repeat = false)
-    : m_duration(duration), m_callback(callback), m_repeat(repeat), m_running(false)
-  {
+  template<typename Func, typename... Args>
+  Timer(long duration, Func&& func, Args&&... args)
+    : m_duration(duration), 
+      m_callback(std::bind(std::forward<Func>(func), std::forward<Args>(args)...)), 
+      m_repeat(false), 
+      m_running(false) {
     m_endTime = chrono::steady_clock::now() + m_duration;
   }
 
-  bool operator<(const Timer &other) const
-  {
+  bool operator<(const Timer &other) const {
     return m_endTime > other.m_endTime;
   }
 };
