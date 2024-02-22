@@ -17,6 +17,7 @@ struct Timer
   chrono::milliseconds m_duration;
   function<void()> m_callback;
   bool m_repeat;
+  int m_priority;
   bool m_running;
   chrono::time_point<chrono::steady_clock> m_endTime;
 

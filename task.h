@@ -17,8 +17,8 @@ struct Task
   int m_priority;
   function<void()> m_callback;
   template<typename Func, typename... Args>
-  Task(int priority, Func&& func, Args&&... args)
-    : m_priority(priority),
+  Task(Func&& func, Args&&... args)
+    : m_priority(0),
       m_callback(std::bind(std::forward<Func>(func), std::forward<Args>(args)...)) {
   }
 };
@@ -54,6 +54,10 @@ public:
         }
       }));
     }
+  }
+
+  ~TaskManager() {
+    stop();
   }
   
   void addTask(shared_ptr<Task> task)
