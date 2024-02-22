@@ -10,6 +10,8 @@
 #include <condition_variable>
 #include <memory>
 
+#include "task.h"
+
 using namespace std;
 
 struct Timer
@@ -19,6 +21,7 @@ struct Timer
   bool m_repeat;
   int m_priority;
   bool m_running;
+  bool m_longRun;
   chrono::time_point<chrono::steady_clock> m_endTime;
 
   template<typename Func, typename... Args>
@@ -26,7 +29,8 @@ struct Timer
     : m_duration(duration), 
       m_callback(std::bind(std::forward<Func>(func), std::forward<Args>(args)...)), 
       m_repeat(false), 
-      m_running(false) {
+      m_running(false),
+      m_longRun(false) {
     m_endTime = chrono::steady_clock::now() + m_duration;
   }
 
@@ -47,9 +51,9 @@ class TimerManager
   condition_variable m_condition;
   bool m_stop = false;
   thread m_thread;
-
+  TaskManager& taskManager;
 public:
-  TimerManager() {
+  TimerManager(TaskManager& taskMgr) : taskManager(taskMgr) {
     m_thread = thread([this] { run(); });
   }
 
@@ -100,10 +104,14 @@ public:
       }
       m_timers.pop();
       lock.unlock();
-      timer->m_callback();
-      if (timer->m_repeat) {
-        timer->m_endTime = chrono::steady_clock::now() + timer->m_duration;
-        addTimer(timer);
+      if (timer->m_longRun) {
+        taskManager.addTask(make_shared<Task>(timer->m_callback));
+      } else {
+        timer->m_callback();
+        if (timer->m_repeat) {
+          timer->m_endTime = chrono::steady_clock::now() + timer->m_duration;
+          addTimer(timer);
+        }
       }
     }
   }
