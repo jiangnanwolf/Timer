@@ -24,30 +24,33 @@ struct Task
 };
 
 struct TaskCompare {
-  bool operator()(const shared_ptr<Task>& t1, const shared_ptr<Task>& t2) const {
+  bool operator()(const unique_ptr<Task>& t1, const unique_ptr<Task>& t2) const {
     return t1->m_priority > t2->m_priority;
   }
 };
 
 class TaskManager
 {
-  priority_queue<shared_ptr<Task>> m_tasks;
+  priority_queue<unique_ptr<Task>, vector<unique_ptr<Task>>, TaskCompare> m_tasks;
   mutex m_mutex;
   condition_variable m_condition;
   bool m_stop = false;
   vector<thread> m_thread;
 public:
   TaskManager() {
-    int numberOfThreads = thread::hardware_concurrency();
+    int numberOfThreads = static_cast<int>(thread::hardware_concurrency());
+    if (numberOfThreads <= 0) {
+      numberOfThreads = 1;
+    }
     for (int i = 0; i < numberOfThreads; i++) {
       m_thread.push_back(thread([this] { 
-        while(!m_stop) {
+        while (true) {
           unique_lock<mutex> lock(m_mutex);
           m_condition.wait(lock, [this] { return m_stop || !m_tasks.empty(); });
-          if (m_stop) {
+          if (m_stop && m_tasks.empty()) {
             return;
           }
-          auto task = m_tasks.top();
+          auto task = std::move(const_cast<unique_ptr<Task>&>(m_tasks.top()));
           m_tasks.pop();
           lock.unlock();
           task->m_callback();
@@ -60,18 +63,29 @@ public:
     stop();
   }
   
-  void addTask(shared_ptr<Task> task)
+  void addTask(unique_ptr<Task> task)
   {
+    if (!task) {
+      return;
+    }
     unique_lock<mutex> lock(m_mutex);
-    m_tasks.push(task);
+    if (m_stop) {
+      return;
+    }
+    m_tasks.push(std::move(task));
+    lock.unlock();
     m_condition.notify_one();
   }
 
   void stop() {
+    unique_lock<mutex> lock(m_mutex);
     m_stop = true;
+    lock.unlock();
     m_condition.notify_all();
     for (auto &t : m_thread) {
-      t.join();
+      if (t.joinable()) {
+        t.join();
+      }
     }
   }
 };
